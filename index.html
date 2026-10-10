@@ -556,6 +556,42 @@
     flex-shrink:0;
     white-space:nowrap;
   }
+  .transfer-bus-options{
+    margin-top:8px;
+    padding:9px 10px;
+    border:1px solid var(--border);
+    border-radius:9px;
+    background:var(--paper);
+  }
+  .transfer-bus-label{
+    display:block;
+    margin-bottom:6px;
+    font-size:0.76rem;
+    font-weight:700;
+    color:var(--muted);
+  }
+  .transfer-bus-chips{display:flex;flex-wrap:wrap;gap:6px;}
+  .transfer-bus-chip{
+    display:inline-flex;
+    align-items:center;
+    max-width:100%;
+    padding:4px 9px;
+    border-radius:7px;
+    border:1px solid color-mix(in srgb, var(--line) 24%, var(--border));
+    background:var(--line-tint);
+    color:var(--line-dark);
+    font-size:0.78rem;
+    font-weight:600;
+    overflow-wrap:anywhere;
+  }
+  .transfer-bus-more{margin-top:7px;}
+  .transfer-bus-more summary{cursor:pointer;color:var(--line-dark);font-size:0.76rem;font-weight:700;list-style:none;}
+  .transfer-bus-more summary::-webkit-details-marker{display:none;}
+  .transfer-bus-more summary::before{content:'＋ ';}
+  .transfer-bus-more[open] summary::before{content:'− ';}
+  .transfer-bus-more .transfer-bus-chips{margin-top:7px;}
+  .transfer-bus-empty{font-size:0.78rem;color:var(--muted);}
+  .transfer-bus-note{margin-top:6px;font-size:0.7rem;color:var(--muted);line-height:1.45;}
   .transfer-at{
     display:flex;
     align-items:center;
@@ -565,6 +601,17 @@
     color:var(--muted);
   }
   .transfer-at svg{width:14px;height:14px; flex-shrink:0; color:var(--marigold);}
+  .direct-bus-section{margin:0 0 16px;}
+  .direct-bus-heading{margin:0 0 8px;font-size:1rem;font-weight:700;color:var(--line-dark);}
+  .direct-bus-list{display:grid;gap:8px;}
+  .direct-bus-card{background:var(--card);border:1px solid color-mix(in srgb,var(--line) 45%,var(--border));border-radius:12px;padding:13px 14px;box-shadow:var(--shadow-sm);}
+  .direct-bus-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+  .direct-bus-name{font-size:.98rem;font-weight:700;color:var(--ink);}
+  .direct-bus-pill{font-size:.7rem;font-weight:700;color:var(--line-dark);background:var(--line-tint);border:1px solid var(--border);padding:3px 8px;border-radius:999px;}
+  .direct-bus-route{font-size:.82rem;line-height:1.8;color:var(--text);overflow-wrap:anywhere;}
+  .direct-bus-route span{color:var(--line-dark);font-weight:700;padding:0 2px;}
+  .direct-bus-bottom{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--border);margin-top:8px;padding-top:7px;font-size:.76rem;font-weight:600;color:var(--muted);}
+  .direct-bus-note{margin:7px 2px 14px;font-size:.76rem;line-height:1.55;color:var(--muted);}
 
   .fare-row{
     display:flex;
@@ -821,6 +868,24 @@
     font-size:0.78rem;
   }
   .stop-table tr:last-child td{border-bottom:none;}
+
+  .route-fare-summary{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    padding:14px;
+    background:var(--line-tint);
+    border-bottom:1px solid var(--border);
+  }
+  .route-fare-summary > div{display:flex;flex-direction:column;gap:3px;min-width:0;}
+  .route-fare-summary > div:first-child{grid-column:1/-1;}
+  .route-fare-summary span{font-size:.75rem;color:var(--muted);}
+  .route-fare-summary strong{font-size:.9rem;color:var(--line-dark);overflow-wrap:anywhere;}
+  .route-fare-summary > div:last-child strong{font-size:1.15rem;}
+  @media(min-width:520px){
+    .route-fare-summary{grid-template-columns:1.2fr .8fr 1fr;}
+    .route-fare-summary > div:first-child{grid-column:auto;}
+  }
 
   footer{
     margin:40px 16px 0;
@@ -1352,8 +1417,8 @@
       <span class="chevron">›</span>
     </button>
     <div class="browse-panel" id="browsePanel" hidden>
-      <p class="browse-hint">রুটের নাম দিয়ে খুঁজুন বা তালিকা থেকে বেছে নিয়ে পুরো স্টপ তালিকা দেখুন</p>
-      <input type="text" class="search-filter" id="routeFilter" placeholder="রুট বা স্টপের নাম লিখুন...">
+      <p class="browse-hint">বাসের নাম বা রুট নম্বর লিখুন। রুট খুললে সব স্টপ, দূরত্ব ও শুরু থেকে ভাড়া দেখুন।</p>
+      <input type="text" class="search-filter" id="routeFilter" placeholder="বাসের নাম, রুট নম্বর বা স্টপ খুঁজুন...">
       <div id="routeList"></div>
     </div>
   </div>
@@ -1649,14 +1714,32 @@ function renderResultsCore(){
 
     const matches = findMatches(from, to);
     if(matches.length === 0){
+      // Separate actual direct bus services from fare-chart transfer paths.
+      // A bus that serves the complete origin-to-destination journey must not
+      // be repeated as if it were a bus for each leg of a transfer.
+      const directBusMatches = uniqueBusMatches(findBuses(from, to));
+      const directBusKeys = new Set(directBusMatches.map(({bus}) => busOperatorKey(bus)));
       const transfers = findTransfers(from, to);
-      if(transfers.length === 0){
-        if(findBuses(from, to).length === 0){
-          box.innerHTML = '<div class="empty-card">এই দুই স্টপের মধ্যে সরাসরি বা এক ট্রান্সফারে কোনো রুট পাওয়া যায়নি।</div>';
-        } else { saveRecent({mode:'two', from, to}); }
+      if(transfers.length === 0 && directBusMatches.length === 0){
+        box.innerHTML = '<div class="empty-card">এই দুই স্টপের মধ্যে সরাসরি বাস বা এক ট্রান্সফারের কোনো রুট ডেটায় পাওয়া যায়নি।</div>';
         return;
       }
-      box.innerHTML = `<div class="empty-card transfer-empty">সরাসরি কোনো রুট নেই — ${toBn(transfers.length)}টি ট্রান্সফার অপশন পাওয়া গেছে:</div>`;
+
+      let intro = '';
+      if(directBusMatches.length && transfers.length){
+        intro = `ভাড়া-চার্টে সরাসরি ভাড়া নেই, তবে ${toBn(directBusMatches.length)}টি সরাসরি বাসের রুট পাওয়া গেছে। নিচে ট্রান্সফারের বিকল্পও রয়েছে:`;
+      } else if(directBusMatches.length){
+        intro = `ভাড়া-চার্টে সরাসরি ভাড়া নেই, তবে ${toBn(directBusMatches.length)}টি সরাসরি বাসের রুট পাওয়া গেছে:`;
+      } else {
+        intro = `ভাড়া-চার্টে সরাসরি রুট নেই — ${toBn(transfers.length)}টি ট্রান্সফার অপশন পাওয়া গেছে:`;
+      }
+      box.innerHTML = `<div class="empty-card transfer-empty">${intro}</div>`;
+      if(directBusMatches.length){
+        const directSection = document.createElement('section');
+        directSection.className = 'direct-bus-section';
+        directSection.innerHTML = directBusOptionsHTML(from, to, directBusMatches);
+        box.appendChild(directSection);
+      }
       transfers.forEach(t => {
         const card = document.createElement('div');
         card.className = 'ticket transfer-ticket';
@@ -1668,6 +1751,7 @@ function renderResultsCore(){
                 <div class="transfer-leg-info">
                   <div class="transfer-leg-route">${t.routeA.name}</div>
                   <div class="transfer-leg-text">${from} → ${t.transferStop}</div>
+                  ${transferBusOptionsHTML(from, t.transferStop, directBusKeys)}
                 </div>
                 <span class="transfer-leg-fare">৳${toBn(t.fareA)}</span>
               </div>
@@ -1680,6 +1764,7 @@ function renderResultsCore(){
                 <div class="transfer-leg-info">
                   <div class="transfer-leg-route">${t.routeB.name}</div>
                   <div class="transfer-leg-text">${t.transferStop} → ${to}</div>
+                  ${transferBusOptionsHTML(t.transferStop, to, directBusKeys)}
                 </div>
                 <span class="transfer-leg-fare">৳${toBn(t.fareB)}</span>
               </div>
@@ -1830,7 +1915,27 @@ const STOP_ALIAS = {
   'কাঁচপুর ব্রীজ':'কাঁচপুর','মদনগঞ্জ':'মদনপুর','পীরজঙ্গী মাজার':'কমলাপুর','মানিক মিয়া এভিনিউ':'মানিক মিয়া এভিনিউ','মানিকমিয়া এভিনিউ':'মানিক মিয়া এভিনিউ'
 };
 function canonStop(n){ return STOP_ALIAS[n] || n; }
-function busIdx(bus, name){ return bus.s.indexOf(canonStop(name)); }
+// Match stop-name variants across fare routes and operator routes. The source
+// datasets use slightly different spellings (and sometimes parenthesized names).
+function stopMatchKeys(name){
+  const values = new Set();
+  const add = value => {
+    if(!value) return;
+    values.add(value);
+    values.add(resolveStop(value));
+    const alias = STOP_ALIAS[value];
+    if(alias){ values.add(alias); values.add(resolveStop(alias)); }
+  };
+  add(String(name || '').trim());
+  return new Set(Array.from(values).map(value => NORM(value)));
+}
+function busIdx(bus, name){
+  const targetKeys = stopMatchKeys(name);
+  return bus.s.findIndex(stop => {
+    for(const key of stopMatchKeys(stop)) if(targetKeys.has(key)) return true;
+    return false;
+  });
+}
 function findBuses(fromName, toName){
   const out = [];
   BUSES.forEach(bus => {
@@ -1839,6 +1944,78 @@ function findBuses(fromName, toName){
   });
   out.sort((a,b) => a.between - b.between || a.bus.n.localeCompare(b.bus.n,'bn'));
   return out;
+}
+function busOperatorKey(bus){
+  return `${String(bus.n || '').trim()}|${String(bus.e || '').trim()}`.toLocaleLowerCase();
+}
+function uniqueBusMatches(matches){
+  const seen = new Set();
+  return matches.filter(({bus}) => {
+    const key = busOperatorKey(bus);
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+function busSegmentStops(bus, fromName, toName){
+  const i = busIdx(bus, fromName), j = busIdx(bus, toName);
+  if(i < 0 || j < 0 || i === j) return [];
+  const segment = bus.s.slice(Math.min(i,j), Math.max(i,j) + 1);
+  return j > i ? segment : segment.reverse();
+}
+function escapeHTML(value){
+  return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function directBusOptionsHTML(fromName, toName, directMatches){
+  const matches = uniqueBusMatches(directMatches);
+  const cards = matches.map(({bus}) => {
+    const stops = busSegmentStops(bus, fromName, toName);
+    if(stops.length < 2) return '';
+    return `<article class="direct-bus-card">
+      <div class="direct-bus-top">
+        <div class="direct-bus-name">${escapeHTML(bus.n)}</div>
+        <span class="direct-bus-pill">সরাসরি · বাস বদলাতে হবে না</span>
+      </div>
+      <div class="direct-bus-route">${stops.map(escapeHTML).join(' <span aria-hidden="true">→</span> ')}</div>
+      <div class="direct-bus-bottom"><span>ভাড়া: ভাড়া-চার্টে নেই</span><span>${toBnPlain(stops.length)}টি স্টপ</span></div>
+    </article>`;
+  }).filter(Boolean);
+  if(!cards.length) return '';
+  return `<h3 class="direct-bus-heading">সরাসরি যে বাসে যেতে পারবেন</h3>
+    <div class="direct-bus-list">${cards.join('')}</div>
+    <p class="direct-bus-note">এই বাসগুলোর স্টপ-তালিকায় শুরু ও গন্তব্য—দুটিই আছে। সরাসরি যেতে ট্রান্সফার প্রয়োজন নেই; এই ডেটাসেটে এগুলোর নির্ভরযোগ্য ভাড়ার তথ্য নেই।</p>`;
+}
+function transferBusOptionsHTML(fromName, toName, excludedBusKeys = new Set()){
+  const matches = findBuses(fromName, toName);
+  // Suppress duplicate operator variants and any bus that already serves the
+  // full journey; it is shown as a direct option above, not as both transfer legs.
+  const seen = new Set();
+  const operators = matches.filter(({bus}) => {
+    const key = busOperatorKey(bus);
+    if(excludedBusKeys.has(key) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if(!operators.length){
+    const hadDirectSuppressed = matches.some(({bus}) => excludedBusKeys.has(busOperatorKey(bus)));
+    return `<div class="transfer-bus-options">
+      <span class="transfer-bus-label">এই অংশে চলা বাস</span>
+      <div class="transfer-bus-empty">${hadDirectSuppressed ? 'পুরো পথে সরাসরি চলা বাসগুলো উপরের সরাসরি বাস অংশে দেখানো হয়েছে; এখানে সেগুলো আবার দেখানো হয়নি।' : 'এই দুই স্টপের জন্য বাসের নামের নির্ভরযোগ্য মিল ডেটায় পাওয়া যায়নি।'}</div>
+    </div>`;
+  }
+  const visible = operators.slice(0, 4);
+  const remaining = operators.slice(4);
+  const chipHTML = item => `<span class="transfer-bus-chip" title="${escapeHTML(item.bus.e)}">${escapeHTML(item.bus.n)}</span>`;
+  const moreHTML = remaining.length ? `<details class="transfer-bus-more">
+      <summary>আরও ${toBnPlain(remaining.length)}টি বাসের নাম</summary>
+      <div class="transfer-bus-chips">${remaining.map(chipHTML).join('')}</div>
+    </details>` : '';
+  return `<div class="transfer-bus-options">
+    <span class="transfer-bus-label">এই অংশে চলা সম্ভাব্য বাস (${toBnPlain(operators.length)}টি)</span>
+    <div class="transfer-bus-chips">${visible.map(chipHTML).join('')}</div>
+    ${moreHTML}
+    <div class="transfer-bus-note">বাসের স্টপ-তালিকার সঙ্গে মিলিয়ে দেখানো হয়েছে; ওঠার আগে গন্তব্যের দিকটি কন্ডাক্টরের কাছে নিশ্চিত করুন।</div>
+  </div>`;
 }
 function busesThrough(stopName){
   const out = [];
@@ -2404,36 +2581,85 @@ function buildStopRows(route){
 }
 
 function renderRouteList(filterText){
-  const q = (filterText||'').trim().toLowerCase();
+  const qRaw = (filterText||'').trim().toLocaleLowerCase('bn');
+  const norm = v => String(v||'').toLocaleLowerCase('bn').replace(/[\s\u200c\u200d\-–—.,()\/]/g,'').replace(/ী/g,'ি').replace(/ূ/g,'ু');
+  const q = norm(qRaw);
   routeListEl.innerHTML = '';
   const filtered = ROUTES.filter(r=>{
     if(!q) return true;
-    if(r.name.toLowerCase().includes(q)) return true;
-    if(r.route_no.toLowerCase().includes(q)) return true;
-    return r.stops.some(s => s[0].toLowerCase().includes(q));
+    return norm(r.name).includes(q) || norm(r.route_no).includes(q) || r.stops.some(s => norm(s[0]).includes(q));
+  });
+  const busFiltered = BUSES.filter(b=>{
+    if(!q) return false; // show bus-operator matches when a search is entered
+    return norm(b.n).includes(q) || norm(b.e).includes(q) || b.s.some(stop => norm(stop).includes(q));
   });
 
-  if(filtered.length === 0){
-    routeListEl.innerHTML = '<div class="empty-card">কোনো রুট মেলেনি।</div>';
+  if(filtered.length === 0 && busFiltered.length === 0){
+    routeListEl.innerHTML = '<div class="empty-card">কোনো রুট বা বাসের নাম মেলেনি। বানান পরিবর্তন করে আবার চেষ্টা করুন।</div>';
     return;
   }
 
-  filtered.forEach(route => {
-    const det = document.createElement('details');
-    det.className = 'route-item';
-    det.innerHTML = `
-      <summary>
-        <span class="route-plate">${route.route_no}</span>
-        <span class="rname">${route.name}</span>
-        <span class="rmeta">${toBn(route.total_km.toFixed(1))} কিঃমিঃ</span>
-      </summary>
-      <table class="stop-table">
-        <thead><tr><th>স্টপ</th><th>কিঃমিঃ</th><th>ভাড়া (শুরু থেকে)</th></tr></thead>
-        <tbody>${buildStopRows(route)}</tbody>
-      </table>
-    `;
-    routeListEl.appendChild(det);
-  });
+  if(busFiltered.length){
+    const heading = document.createElement('div');
+    heading.className = 'browse-hint';
+    heading.style.marginTop = '8px';
+    heading.innerHTML = `<strong>বাসের নাম অনুযায়ী রুট (${toBn(busFiltered.length)})</strong>`;
+    routeListEl.appendChild(heading);
+    busFiltered.forEach(bus => {
+      const det = document.createElement('details');
+      det.className = 'route-item';
+      const stops = bus.s;
+      // Operator data provides stop order but not stop-to-stop distances, so do not invent fares.
+      det.innerHTML = `
+        <summary>
+          <span class="route-plate">বাস</span>
+          <span class="rname">${bus.n} <small style="font-weight:400;color:var(--muted)">${bus.e}</small></span>
+          <span class="rmeta">${toBn(stops.length)} স্টপ</span>
+        </summary>
+        <div class="route-fare-summary">
+          <div><span>সম্পূর্ণ রুট</span><strong>${stops[0]} → ${stops[stops.length-1]}</strong></div>
+          <div><span>মোট স্টপ</span><strong>${toBn(stops.length)}টি</strong></div>
+          <div><span>ভাড়া</span><strong>নির্ভরযোগ্য দূরত্বের তথ্য নেই</strong></div>
+        </div>
+        <table class="stop-table">
+          <thead><tr><th>ক্রম</th><th colspan="2">স্টপেজ</th></tr></thead>
+          <tbody>${stops.map((stop,i)=>`<tr><td>${toBn(i+1)}</td><td colspan="2">${stop}</td></tr>`).join('')}</tbody>
+        </table>
+      `;
+      routeListEl.appendChild(det);
+    });
+  }
+
+  if(filtered.length){
+    if(busFiltered.length){
+      const heading = document.createElement('div');
+      heading.className = 'browse-hint';
+      heading.style.marginTop = '18px';
+      heading.innerHTML = `<strong>দূরত্ব ও ভাড়ার তথ্যসহ রুট (${toBn(filtered.length)})</strong>`;
+      routeListEl.appendChild(heading);
+    }
+    filtered.forEach(route => {
+      const det = document.createElement('details');
+      det.className = 'route-item';
+      det.innerHTML = `
+        <summary>
+          <span class="route-plate">${route.route_no}</span>
+          <span class="rname">${route.name}</span>
+          <span class="rmeta">${toBn(route.total_km.toFixed(1))} কিঃমিঃ</span>
+        </summary>
+        <div class="route-fare-summary">
+          <div><span>সম্পূর্ণ রুট</span><strong>${toBn(route.stops[0][0])} → ${toBn(route.stops[route.stops.length-1][0])}</strong></div>
+          <div><span>মোট দূরত্ব</span><strong>${toBn(route.total_km.toFixed(1))} কিঃমিঃ</strong></div>
+          <div><span>সম্পূর্ণ রুটের আনুমানিক ভাড়া</span><strong>৳${toBn(fareFor(route.total_km, route.rate))}</strong></div>
+        </div>
+        <table class="stop-table">
+          <thead><tr><th>স্টপ</th><th>শুরু থেকে দূরত্ব</th><th>শুরু থেকে ভাড়া</th></tr></thead>
+          <tbody>${buildStopRows(route)}</tbody>
+        </table>
+      `;
+      routeListEl.appendChild(det);
+    });
+  }
 }
 
 document.getElementById('routeFilter').addEventListener('input', e=>{
